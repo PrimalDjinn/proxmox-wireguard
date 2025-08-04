@@ -38,7 +38,31 @@ fi
 
 # Find next available client IP
 NEXT_IP=2
-while [ -f "${CLIENT_NAME}.conf" ] || grep -q "${VPN_NET}.${NEXT_IP}" *.conf 2>/dev/null; do
+# Create an array of used IPs from client configs only
+USED_IPS=()
+for conf in *.conf; do
+    # Skip server configuration file
+    if [[ "$conf" == "$WG_IF.conf" ]]; then
+        continue
+    fi
+    # Extract IP from client configs
+    ip=$(grep -oP 'Address\s*=\s*\K[0-9.]+' "$conf" 2>/dev/null)
+    if [[ -n "$ip" ]]; then
+        USED_IPS+=("$ip")
+    fi
+done
+
+# Find next available IP
+while :; do
+    CLIENT_IP="${VPN_NET}.${NEXT_IP}"
+    # Check if IP is in use
+    if ! printf '%s\n' "${USED_IPS[@]}" | grep -q "^${CLIENT_IP}$"; then
+        # Additional check to ensure IP isn't in server config
+        if ! grep -q "${CLIENT_IP}" "$WG_IF.conf"; then
+            break
+        fi
+    fi
+
     NEXT_IP=$((NEXT_IP + 1))
     if [ $NEXT_IP -gt 254 ]; then
         echo "Error: No available IPs"
@@ -87,31 +111,3 @@ wg-quick save $WG_IF
 
 # Add firewall rules and save to data file
 IFS=',' read -ra IPS <<<"${ALLOWED_IPS// /}"
-for ip in "${IPS[@]}"; do
-    # Add immediate rules
-    iptables -A FORWARD -s $CLIENT_IP -d ${ip%/*} -j ACCEPT
-    iptables -A FORWARD -d $CLIENT_IP -s ${ip%/*} -j ACCEPT
-
-    # Save to data file for persistence
-    echo "$CLIENT_IP ${ip%/*}" >>"$DATA_FILE"
-done
-
-# Update client rules file
-echo "#!/bin/bash" >"$CLIENT_RULES_FILE"
-echo "while read -r client_ip target_ip; do" >>"$CLIENT_RULES_FILE"
-echo "    iptables -A FORWARD -s \$client_ip -d \$target_ip -j ACCEPT" >>"$CLIENT_RULES_FILE"
-echo "    iptables -A FORWARD -d \$client_ip -s \$target_ip -j ACCEPT" >>"$CLIENT_RULES_FILE"
-echo "done < <(grep -v '^#' $DATA_FILE)" >>"$CLIENT_RULES_FILE"
-chmod +x "$CLIENT_RULES_FILE"
-
-echo "[✓] Client '$CLIENT_NAME' created!"
-echo "Config file: ${CLIENT_NAME}.conf"
-echo "Client IP: $CLIENT_IP"
-echo "Allowed Networks: $ALLOWED_IPS"
-
-# Generate QR code if available
-if command -v qrencode >/dev/null; then
-    echo ""
-    echo "QR Code:"
-    qrencode -t ansiutf8 <"${CLIENT_NAME}.conf"
-fi
