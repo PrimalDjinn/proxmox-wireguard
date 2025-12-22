@@ -9,7 +9,7 @@ WG_DIR="/etc/wireguard"
 DNS=${DNS:-"1.1.1.1"}
 
 # Your LXC subnets
-LXC_SUBNETS=("10.10.10.0/24" "10.20.20.0/24")
+LXC_SUBNETS=("10.10.10.0/24" "20.20.20.0/24")
 
 # === UTILS ===
 validate_ip() {
@@ -108,10 +108,9 @@ PostUp = /etc/wireguard/wg0-client-rules
 PostDown = iptables -D FORWARD -i %i -j ACCEPT
 PostDown = iptables -D FORWARD -o %i -j ACCEPT
 PostDown = iptables -t nat -D POSTROUTING -s 10.100.100.0/24 -o vmbr0 -j MASQUERADE
-PrivateKey =
 EOF
 
-chmod 600 $WG_IF.conf
+chmod +x $WG_IF.conf
 
 echo "[+] Enabling IP forwarding"
 sysctl -w net.ipv4.ip_forward=1 >/dev/null
