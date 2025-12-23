@@ -1,0 +1,26 @@
+# /etc/pve/firewall/cluster.fw
+[OPTIONS]
+
+enable: 1
+
+[RULES]
+
+OUT ACCEPT -log nolog
+IN ACCEPT -p udp -dport 51820 -log nolog # WireGuard
+IN HTTPS(ACCEPT) -log nolog
+IN HTTP(ACCEPT) -log nolog
+IN SSH(ACCEPT) -log info
+IN ACCEPT -p tcp -dport 8006 -log info # Proxmox UI
+
+# Allow traffic from private networks to reach the internet
+IN ACCEPT -source 10.10.10.0/24 -log nolog
+IN ACCEPT -source 10.20.20.0/24 -log nolog
+
+# Allow forwarding for private networks (containers/VMs to internet)
+GROUP private_forward
+
+[group private_forward]
+IN ACCEPT -source 10.10.10.0/24
+IN ACCEPT -source 10.20.20.0/24
+OUT ACCEPT -dest 10.10.10.0/24
+OUT ACCEPT -dest 10.20.20.0/24
