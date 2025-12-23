@@ -1,0 +1,31 @@
+# /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto ens3
+iface ens3 inet static
+        address 158.x.x.x/32
+        gateway 158.x.x.1
+        post-up /sbin/ip route add 158.x.x.1 dev ens3
+        post-up /sbin/ip route add default via 158.69.192.1 dev ens3
+        dns-nameservers 1.1.1.1 8.8.8.8
+
+auto vmbr10
+iface vmbr10 inet static
+        address 10.10.10.1/24
+        bridge-ports none
+        bridge-stp off
+        bridge-fd 0
+        post-up echo 1 > /proc/sys/net/ipv4/ip_forward
+        post-up iptables -t nat -A POSTROUTING -s '10.10.10.0/24' -o ens3 -j MASQUERADE
+        post-down iptables -t nat -D POSTROUTING -s '10.10.10.0/24' -o ens3 -j MASQUERADE
+
+auto vmbr20
+iface vmbr20 inet static
+        address 10.20.20.1/24
+        bridge-ports none
+        bridge-stp off
+        bridge-fd 0
+        post-up echo 1 > /proc/sys/net/ipv4/ip_forward
+        post-up iptables -t nat -A POSTROUTING -s '10.20.20.0/24' -o ens3 -j MASQUERADE
+        post-down iptables -t nat -D POSTROUTING -s '10.20.20.0/24' -o ens3 -j MASQUERADE
