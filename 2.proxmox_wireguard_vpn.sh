@@ -94,7 +94,7 @@ echo "[*] External interface detected: $EXT_IF"
 
 touch $WG_IF-client-rules
 touch $WG_IF-client-data
-
+chmod +x $WG_IF-client-rules
 cat >$WG_IF.conf <<EOF
 [Interface]
 Address = $WG_SERVER_IP/24
@@ -141,7 +141,7 @@ echo "Dev Network: 10.10.10.0/24 (gateway: 10.10.10.1)"
 echo "Staging Network: 10.20.20.0/24 (gateway: 10.20.20.1)"
 echo ""
 
-chmod +x add_client.sh
+# chmod +x add_client.sh
 
 echo ""
 echo "=== CLIENT SETUP ==="
