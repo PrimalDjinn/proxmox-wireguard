@@ -13,7 +13,10 @@ BLUE="\e[34m"
 RESET="\e[0m"
 
 ### UTILS ###
-pause() { read -rp "Press Enter to continue..."; }
+pause() { 
+  echo "Press Enter to continue..."
+  read -r _
+}
 
 require_root() {
   if [[ $EUID -ne 0 ]]; then
