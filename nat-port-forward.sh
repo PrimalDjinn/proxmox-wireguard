@@ -2,7 +2,6 @@
 set -e
 
 ### CONFIG DEFAULTS ###
-DEFAULT_LXC_IP="10.10.10.4"
 VM_SUBNET="10.10.10.0/24"
 
 ### COLORS ###
@@ -87,30 +86,57 @@ show_forwards() {
 
 add_forward() {
   read -rp "Public port to expose: " PUB_PORT
-  read -rp "LXC/VM IP [${DEFAULT_LXC_IP}]: " LXC_IP
-  LXC_IP=${LXC_IP:-$DEFAULT_LXC_IP}
+  read -rp "LXC/VM IP (required): " LXC_IP
+
+  if [[ -z "$LXC_IP" ]]; then
+    echo -e "${RED}LXC/VM IP is required${RESET}"
+    return
+  fi
+
   read -rp "LXC/VM port [$PUB_PORT]: " LXC_PORT
   LXC_PORT=${LXC_PORT:-$PUB_PORT}
-  
+
+  read -rp "Protocol (tcp/udp/both) [tcp]: " PROTO
+  PROTO=${PROTO:-tcp}
+
   IFACE=$(detect_iface)
-  
-  echo -e "${GREEN}[*] Forwarding ${IFACE}:${PUB_PORT} → ${LXC_IP}:${LXC_PORT}${RESET}"
-  
-  # DNAT (skip traffic from VM subnet - handled by PREROUTING rule)
-  iptables -t nat -C PREROUTING -p tcp --dport "$PUB_PORT" -j DNAT --to "$LXC_IP:$LXC_PORT" 2>/dev/null ||
-  iptables -t nat -A PREROUTING -p tcp --dport "$PUB_PORT" -j DNAT --to "$LXC_IP:$LXC_PORT"
-  
-  # FORWARD allow (these are now redundant with DOCKER-USER rules but kept for non-Docker setups)
-  iptables -C FORWARD -p tcp -d "$LXC_IP" --dport "$LXC_PORT" -j ACCEPT 2>/dev/null ||
-  iptables -A FORWARD -p tcp -d "$LXC_IP" --dport "$LXC_PORT" -j ACCEPT
-  
-  iptables -C FORWARD -p tcp -s "$LXC_IP" --sport "$LXC_PORT" -j ACCEPT 2>/dev/null ||
-  iptables -A FORWARD -p tcp -s "$LXC_IP" --sport "$LXC_PORT" -j ACCEPT
-  
-  # MASQUERADE
+
+  echo -e "${GREEN}[*] Forwarding ${PROTO^^} ${IFACE}:${PUB_PORT} → ${LXC_IP}:${LXC_PORT}${RESET}"
+
+  forward_proto() {
+    local P=$1
+
+    # DNAT
+    iptables -t nat -C PREROUTING -p "$P" --dport "$PUB_PORT" -j DNAT --to "$LXC_IP:$LXC_PORT" 2>/dev/null ||
+    iptables -t nat -A PREROUTING -p "$P" --dport "$PUB_PORT" -j DNAT --to "$LXC_IP:$LXC_PORT"
+
+    # FORWARD in
+    iptables -C FORWARD -p "$P" -d "$LXC_IP" --dport "$LXC_PORT" -j ACCEPT 2>/dev/null ||
+    iptables -A FORWARD -p "$P" -d "$LXC_IP" --dport "$LXC_PORT" -j ACCEPT
+
+    # FORWARD out
+    iptables -C FORWARD -p "$P" -s "$LXC_IP" --sport "$LXC_PORT" -j ACCEPT 2>/dev/null ||
+    iptables -A FORWARD -p "$P" -s "$LXC_IP" --sport "$LXC_PORT" -j ACCEPT
+  }
+
+  case "$PROTO" in
+    tcp|udp)
+      forward_proto "$PROTO"
+      ;;
+    both)
+      forward_proto tcp
+      forward_proto udp
+      ;;
+    *)
+      echo -e "${RED}Invalid protocol. Use tcp, udp, or both.${RESET}"
+      return
+      ;;
+  esac
+
+  # MASQUERADE (once per IP)
   iptables -t nat -C POSTROUTING -s "$LXC_IP" -o "$IFACE" -j MASQUERADE 2>/dev/null ||
   iptables -t nat -A POSTROUTING -s "$LXC_IP" -o "$IFACE" -j MASQUERADE
-  
+
   netfilter-persistent save >/dev/null
   echo -e "${GREEN}✔ Port forwarded successfully${RESET}"
 }
